@@ -1,0 +1,751 @@
+<div class="card-header">
+    <h3 class="card-title">List of Warranties</h3>
+    <button type="button" class="btn btn-primary float-right" data-toggle="modal" data-target="#addMaintenance">
+        Add Warranty <i class="fas fa-plus mr-1"></i>
+      </button>
+</div>
+
+<div class="card-body">
+    <div class="row">
+        <div class="col-12">
+            <table id="warranty_table" class="table table-bordered table-hover"
+            style = "width: 100% !important">
+                <thead>
+                <tr>
+                <th>ID</th>
+                <th>Length(Months)</th>
+                <th>Expiration</th>
+                <th>Contact</th>
+                <th>Email</th>
+                <th>Note</th>
+                <th>Action</th>
+                </tr>
+                </thead>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="{{url_for('static', path='/plugins/jquery/jquery.min.js')}}"></script>
+<script>
+
+$(document).ready(function () {
+    id = "{{id}}"
+    $("#warranty_table").DataTable({
+
+        ajax: "/asset_management/api/Asset_warranty/asset_warranty/" + id,
+        dom: 'Blfrtip',
+        buttons: [
+            'copy',
+            'csv',
+            'excel',
+            {
+              extend: 'pdfHtml5',
+              orientation: 'landscape',
+              pageSize: 'LEGAL'
+          },
+          'print',
+            
+        ],
+        columns: [
+                { data: "warranty_id"},
+                { data: "warranty_length"},
+                { data: "expiration_date", render:function(data){
+                    return moment(data).format('LL') +
+                    "<div class='text-secondary font-italic'>" + moment(data).startOf('seconds').fromNow()+"</div>"
+                  }
+                },
+                { data: "warranty_contact"},
+                { data: "warranty_email"},
+                { data: "warranty_note"},
+                { data: "active_status", render: function(data, type, row){
+                    if(data == "Active"){
+                        return '<div class="text-center dropdown"><div class="btn btn-sm btn-default" data-toggle="dropdown" role="button"><i class="fas fa-ellipsis-v"></i></div>' +
+                          '<div class="dropdown-menu dropdown-menu-right">' +
+                              '<div class="dropdown-item d-flex btn_view" id="'+ row.warranty_id +'" role="button">' +
+                                '<div style="width: 2rem"><i class="fas fa-eye"></i></div>' +
+                                '<div>View Warranty</div></div>' +
+                                  '<div class="dropdown-item d-flex btn_delete" id="'+ row.warranty_id +'" role="button">' +
+                                    '<div style="width: 2rem"><i class="fas fa-trash-alt"></i></div>' +
+                                    '<div style="color: red">Delete Warranty</div></div></div></div>';
+                    }  
+                    else{
+                        return '<button class="btn btn-danger >Activate</button>';
+                    }
+                }
+                
+            },
+        ],
+        "aoColumnDefs": [{ "bVisible": false, "aTargets": [0] }]
+        
+        })
+
+        $.ajax({
+                url: '/asset_management/api/Maintenance_Provider/',
+                type: "GET",
+                dataType: "JSON",
+
+                success: function(data){
+                    var maintenance_provider = data.data;
+
+                    var html = ""
+
+                    if(maintenance_provider.length == 0){
+                      var html = `<option value=""> - - No Provider - - </option>`;
+                    }
+                    else{
+                      var html = `<option value=""> - - Select Provider - - </option>`;
+                    }
+
+                    for(var i=0; i < maintenance_provider.length; i++){
+                    html += `<option value="${maintenance_provider[i].maintenance_provider_id}">${maintenance_provider[i].maintenance_provider_name}</option>`
+                    }
+                    
+                    $('#maintenance_provider').html(html);
+                    $('#edit_maintenance_provider').html(html);
+                    
+
+                }
+                })
+
+$('#edit_maintenance_status').change(function(){
+    
+    if(this.value == "Completed") {
+        html = 
+        '<div class="form-group col-sm-12 edit_completed_date">' +
+            '<label for="edit_maintenance_completed">Date Completed</label><label style="color: red;">*</label>' +
+            '<input required type="date" name="edit_maintenance_completed" id="edit_maintenance_completed" class="form-control">' +
+        '</div>'
+
+    $('#edit_completed_date').html(html);
+    }
+    else{
+        $('.edit_completed_date').remove();
+    }
+
+
+});
+
+$('#repeatable_yes').change(function(){
+    if(this.checked) {
+        html = '<div class="form-group col-sm-12 frequency_form">' +
+            '<label for="acquisition_date">Frequency</label><label style="color: red;">*</label>' +
+            '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="frequency" id="daily" checked>' +
+            '<label class="form-check-label" for="daily">' +
+                'Daily' +
+            '</label>' +
+            '</div>' +
+            '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="frequency" id="weekly">' +
+            '<label class="form-check-label" for="weekly">' +
+                'Weekly' +
+            '</label>' +
+            '</div>' +
+            '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="frequency" id="monthly">' +
+            '<label class="form-check-label" for="monthly">' +
+                'Monthly' +
+            '</label>' +
+            '</div>' +
+            '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="frequency" id="yearly">' +
+            '<label class="form-check-label" for="yearly">' +
+                'Yearly' +
+            '</label>' +
+            '</div>' +
+        '</div>'
+
+        $('#frequency_form').html(html);
+
+    }
+});
+
+$('#repeatable_no').change(function(){
+    if(this.checked) {
+        $(".frequency_form").remove();
+
+    }
+});
+
+
+$("#addMaintenanceForm").on("submit", function(e){
+
+    e.preventDefault();
+
+    id = "{{id}}"
+    date_completed = ""
+    days = 0
+
+    if(document.getElementById('repeatable_yes').checked){
+        repeatable = "True"
+
+        if(document.getElementById('daily').checked){
+            days = 1
+        }
+        else if(document.getElementById('weekly').checked){
+            days = 7
+        }
+        else if(document.getElementById('monthly').checked){
+            days = 30
+        } 
+        else if(document.getElementById('yearly').checked){
+            days = 365
+        } 
+    }
+    else{
+        repeatable = "False"
+    }
+
+    
+
+    form =  { asset_id: id,
+                maintenance_name: $(maintenance_name).val(),
+                maintenance_details: $(maintenance_details).val(),
+                maintenance_provider_id: $(maintenance_provider).val(),
+                maintenance_cost: $(maintenance_cost).val(),
+                maintenance_due: new Date($(maintenance_due).val()),
+                maintenance_status: $(maintenance_status).val(),
+                maintenance_repeatable: repeatable,
+                maintenance_day: days,
+                };
+
+    encoded = JSON.stringify(form)
+    console.log(encoded)
+
+        $.ajax({
+            url:'/asset_management/api/Maintenance/',
+            type: "POST",
+            data: encoded,
+            dataType: "JSON",
+            contentType: "application/json",
+
+            success: function(data){
+
+                events = {
+                    asset_id : "{{id}}",
+                    event_title : "Maintenance Added",
+                    event_message: "Maintenance named " + $(maintenance_name).val() + "." +
+                                    " Added by " + sessionStorage.getItem("name")
+                }
+
+                    $.ajax({
+                    url:'/asset_management/api/Event/',
+                    type: "POST",
+                    data: JSON.stringify(events),
+                    dataType: "JSON",
+                    contentType: "application/json",
+
+                    success: function(data){
+                    console.log("EVENT CREATED")
+
+                    assetDetails()
+                    load_event("{{id}}")
+                    $('#addMaintenance').modal('hide');
+                    refresh_maintenance()
+                    toastr.success('Maintenance added successfully')
+                    }
+                })
+            }
+        })
+
+       
+    });
+
+
+    function refresh_maintenance(){
+
+        $('#maintenance_table').DataTable().ajax.reload();
+    }
+
+
+    $(document).on("click", ".btn_view", function(){
+        var id = this.id;
+  
+          $.ajax({
+              url: '/asset_management/api/Maintenance/view/' + id,
+              type: "GET",
+              data: { id: id },
+              dataType: "JSON",
+          
+              success: function(data){
+                  console.log(data);
+                  var maintenanceInfo = data.data;
+  
+                  
+                  $('#view_maintenance_name').html(maintenanceInfo.maintenance_name);
+                  $('#view_maintenance_details').html(maintenanceInfo.maintenance_details);
+                  $('#view_maintenance_provider').html(maintenanceInfo.Maintenance_provider.maintenance_provider_name);
+                  $('#view_maintenance_cost').html("₱"+maintenanceInfo.maintenance_cost);
+                  $('#view_maintenance_due').html(moment(maintenanceInfo.maintenance_due).format('LL'));
+                  $('#view_maintenance_status').html(maintenanceInfo.maintenance_status);
+
+                  if(maintenanceInfo.maintenance_completed != null){
+                    $('#view_maintenance_completed').html(moment(maintenanceInfo.maintenance_completed).format('LL'));
+                  }
+                  else{
+                    $('#view_maintenance_completed').html("Not yet");
+                  }
+
+                  if(maintenanceInfo.maintenance_repeatable == "True"){
+                    $('#view_repeatable').html("Yes");
+                    if(maintenanceInfo.maintenance_day == 1){
+                        $('#view_frequency').html("Daily");
+                    }
+                    else if(maintenanceInfo.maintenance_day == 7){
+                        $('#view_frequency').html("Weekly");
+                    }
+                    else if(maintenanceInfo.maintenance_day == 30){
+                        $('#view_frequency').html("Monthly");
+                    }
+                    else if(maintenanceInfo.maintenance_day == 365){
+                        $('#view_frequency').html("Yearly");
+                    }
+                  }
+                  else{
+                    $('#view_repeatable').html("No");
+                    $('#view_frequency').html("None");
+                  }
+                  
+  
+                  $('#viewMaintenance').modal('show');
+              }
+          // ajax closing tag
+          })
+      });
+
+      $(document).on("click", ".btn_edit", function(){
+          id = this.id
+        $.ajax({
+                url: '/asset_management/api/Maintenance/view/' + id,
+                type: "GET",
+                dataType: "JSON",
+            
+                success: function(data){
+                    var maintenance_info = data.data;
+                    console.log(maintenance_info);
+
+                    //EDIT
+                    $("#edit_maintenance_id").val(maintenance_info.maintenance_id );
+                    $("#edit_maintenance_name").val(maintenance_info.maintenance_name );
+                    $("#edit_maintenance_details").val(maintenance_info.maintenance_details);
+                    $("#edit_maintenance_provider").val(maintenance_info.Maintenance_provider.maintenance_provider_id );
+                    $("#edit_maintenance_cost").val(maintenance_info.maintenance_cost );
+                    $("#edit_maintenance_due").val(moment(new Date(maintenance_info.maintenance_due)).format('YYYY[-]MM[-]DD'));
+                    $("#edit_maintenance_status").val(maintenance_info.maintenance_status);
+                    $("#edit_maintenance_remarks").val(maintenance_info.remarks);
+                    if(maintenance_info.maintenance_repeatable == "True"){
+                        $('#edit_repeatable_yes').prop('checked', true)
+                        html = '<div class="form-group col-sm-12 edit_frequency_form">' +
+                            '<label for="acquisition_date">Frequency</label><label style="color: red;">*</label>' +
+                            '<div class="form-check">' +
+                            '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_daily" checked>' +
+                            '<label class="form-check-label" for="edit_daily">' +
+                                'Daily' +
+                            '</label>' +
+                            '</div>' +
+                            '<div class="form-check">' +
+                            '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_weekly">' +
+                            '<label class="form-check-label" for="edit_weekly">' +
+                                'Weekly' +
+                            '</label>' +
+                            '</div>' +
+                            '<div class="form-check">' +
+                            '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_monthly">' +
+                            '<label class="form-check-label" for="edit_monthly">' +
+                                'Monthly' +
+                            '</label>' +
+                            '</div>' +
+                            '<div class="form-check">' +
+                            '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_yearly">' +
+                            '<label class="form-check-label" for="edit_yearly">' +
+                                'Yearly' +
+                            '</label>' +
+                            '</div>' +
+                        '</div>'
+                
+                        $('#edit_frequency_form').html(html);
+
+                        if(maintenance_info.maintenance_day == 1){
+                            $('#edit_daily').prop('checked', true)
+                        }
+                        if(maintenance_info.maintenance_day == 7){
+                            $('#edit_weekly').prop('checked', true)
+                        }
+                        if(maintenance_info.maintenance_day == 30){
+                            $('#edit_monthly').prop('checked', true)
+                        }
+                        if(maintenance_info.maintenance_day == 365){
+                            $('#edit_yearly').prop('checked', true)
+                        }
+                    }
+                    else{
+                        $("#edit_repeatable_no").prop('checked', true)
+                    }
+
+                    if(maintenance_info.maintenance_status == "Completed") {
+                        html = 
+                        '<div class="form-group col-sm-12 edit_completed_date">' +
+                            '<label for="edit_maintenance_completed">Date Completed</label><label style="color: red;">*</label>' +
+                            '<input disabled type="date" name="edit_maintenance_completed" id="edit_maintenance_completed" class="form-control">' +
+                        '</div>'
+
+                        html_status = '<option value = ""> - - Select - -</option>' +
+                            '<option value = "Pending">Pending</option>' +
+                            '<option value = "Completed">Completed</option>'
+                
+                    $('#edit_maintenance_status').html(html_status);
+                    $('#edit_maintenance_status').val(maintenance_info.maintenance_status);
+                    $('#edit_completed_date').html(html);
+                    $("#edit_maintenance_completed").val(moment(new Date(maintenance_info.maintenance_due)).format('YYYY[-]MM[-]DD'));
+                    }
+                    else if(maintenance_info.maintenance_status == "Pending"){
+                        html_status = '<option value = ""> - - Select - -</option>' +
+                            '<option value = "Pending">Pending</option>' 
+
+                        $('#edit_maintenance_status').html(html_status);
+                        $('#edit_maintenance_status').val(maintenance_info.maintenance_status);
+                        $('.edit_completed_date').remove();
+                    }
+                    else{
+                        $('.edit_completed_date').remove();
+                    }
+
+                    $('#editMaintenance').modal('show');
+
+                    $('#edit_maintenance_status').change(function(){
+    
+                        if(this.value == "Completed") {
+                            html = 
+                            '<div class="form-group col-sm-12 edit_completed_date">' +
+                                '<label for="edit_maintenance_completed">Date Completed</label><label style="color: red;">*</label>' +
+                                '<input disabled type="date" name="edit_maintenance_completed" id="edit_maintenance_completed" class="form-control">' +
+                            '</div>'
+
+                        
+                        $('#edit_completed_date').html(html);
+                        $("#edit_maintenance_completed").val(moment(new Date(maintenance_info.maintenance_completed)).format('YYYY[-]MM[-]DD'));
+                        }
+                        else{
+                            $('.edit_completed_date').remove();
+                        }
+                    
+                    
+                    });
+
+                }
+                
+        });
+        
+        $('#edit_repeatable_yes').change(function(){
+            if(this.checked) {
+                html = '<div class="form-group col-sm-12 edit_frequency_form">' +
+                    '<label for="acquisition_date">Frequency</label><label style="color: red;">*</label>' +
+                    '<div class="form-check">' +
+                    '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_daily" checked>' +
+                    '<label class="form-check-label" for="edit_daily">' +
+                        'Daily' +
+                    '</label>' +
+                    '</div>' +
+                    '<div class="form-check">' +
+                    '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_weekly">' +
+                    '<label class="form-check-label" for="edit_weekly">' +
+                        'Weekly' +
+                    '</label>' +
+                    '</div>' +
+                    '<div class="form-check">' +
+                    '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_monthly">' +
+                    '<label class="form-check-label" for="edit_monthly">' +
+                        'Monthly' +
+                    '</label>' +
+                    '</div>' +
+                    '<div class="form-check">' +
+                    '<input class="form-check-input" type="radio" name="edit_frequency" id="edit_yearly">' +
+                    '<label class="form-check-label" for="edit_yearly">' +
+                        'Yearly' +
+                    '</label>' +
+                    '</div>' +
+                '</div>'
+        
+                $('#edit_frequency_form').html(html);
+        
+            }
+        });
+        $('#edit_repeatable_no').change(function(){
+            if(this.checked) {
+                $(".edit_frequency_form").remove();
+        
+            }
+        });
+    });
+    
+
+$("#editMaintenanceForm").on("submit", function(e){
+
+    e.preventDefault();
+
+    id = $(edit_maintenance_id).val()
+    
+    due = new Date($(edit_maintenance_due).val())
+    date_completed = ""
+    days = 0
+    status = $(edit_maintenance_status).val()
+
+    if(status == "Completed"){
+        date_completed = new Date($(edit_maintenance_completed).val())
+    }
+
+    if(document.getElementById('edit_repeatable_yes').checked){
+        repeatable = "True"
+
+        if(document.getElementById('edit_daily').checked){
+            days = 1
+        }
+        else if(document.getElementById('edit_weekly').checked){
+            days = 7
+        }
+        else if(document.getElementById('edit_monthly').checked){
+            days = 30
+        } 
+        else if(document.getElementById('edit_yearly').checked){
+            days = 365
+        }
+
+    }
+    else{
+        repeatable = "False"
+    }
+    
+    
+    form =  { maintenance_name: $(edit_maintenance_name).val(),
+                maintenance_details: $(edit_maintenance_details).val(),
+                maintenance_provider_id: $(edit_maintenance_provider).val(),
+                maintenance_cost: $(edit_maintenance_cost).val(),
+                maintenance_due: due,
+                maintenance_status: status,
+                remarks: $(edit_maintenance_remarks).val(),
+                maintenance_repeatable: repeatable,
+                maintenance_day: days
+                };
+
+    encoded = JSON.stringify(form)
+    console.log(encoded)
+
+        $.ajax({
+            url:'/asset_management/api/Maintenance/' + id,
+            type: "PUT",
+            data: encoded,
+            dataType: "JSON",
+            contentType: "application/json",
+
+            success: function(data){
+
+                events = {
+                    asset_id : "{{id}}",
+                    event_title : "Maintenance Updated",
+                    event_message: "Maintenance named " + $(edit_maintenance_name).val() + ". Updated by " + sessionStorage.getItem("name")
+                    }
+
+                    $.ajax({
+                    url:'/asset_management/api/Event/',
+                    type: "POST",
+                    data: JSON.stringify(events),
+                    dataType: "JSON",
+                    contentType: "application/json",
+
+                    success: function(data){
+                    console.log("EVENT CREATED")
+
+                    assetDetails()
+                    load_event("{{id}}")
+                    $('#editMaintenance').modal('hide');
+                    toastr.success('Maintenance edited successfully')
+                    refresh_maintenance()
+                    }
+                })
+            }
+                
+        })
+    });
+
+
+
+    $(document).on("click", ".btn_complete", function(){
+        var id = this.id;
+
+        $.ajax({
+            url: '/asset_management/api/Maintenance/view/' + id,
+            type: "GET",
+            dataType: "JSON",
+        
+            success: function(data){
+                var maintenance_info = data.data;
+                $('#maintenance_complete_id').val(maintenance_info.maintenance_id);
+                $('#maintenance_repeat_days').val(maintenance_info.maintenance_day);
+                $('#complete_maintenance_name').val(maintenance_info.maintenance_name);
+                $('#complete_maintenance_cost').val(maintenance_info.maintenance_cost);
+                $('#completed_due_date').val(moment(new Date(maintenance_info.maintenance_due)).format('YYYY[-]MM[-]DD'));
+
+                $('#completeMaintenance').modal('show');
+
+            }
+        })  
+        
+      });
+
+      $("#completeMaintenanceForm").on("submit", function(e){
+
+        e.preventDefault();
+
+        var id = $(maintenance_complete_id).val();
+
+        form =  { maintenance_id: $(maintenance_complete_id).val(),
+                    maintenance_cost: $(complete_maintenance_cost).val(),
+                    remarks: $(complete_remarks).val(),
+                    completed_date: new Date($(completed_date_legit).val()),
+                    };
+    
+        encoded = JSON.stringify(form)
+        console.log(encoded)
+        
+        $.ajax({
+            url: '/asset_management/api/Maintenance_report/',
+            type: "POST",
+            data: encoded,
+            dataType: "JSON",
+            contentType: "application/json",
+
+            success: function(data){
+                if($(maintenance_repeat_days).val() != 0){
+
+                    due = new Date($(completed_due_date).val())
+                    due.setDate(due.getDate() + parseInt($(maintenance_repeat_days).val()))
+                    console.log(due)
+
+                    form =  {
+                        maintenance_cost: $(complete_maintenance_cost).val(),
+                        maintenance_due: due,
+                        maintenance_completed: new Date($(completed_date_legit).val()),
+                        maintenance_status: "Pending",
+                        };
+
+                    encoded = JSON.stringify(form)
+                    console.log(encoded)
+
+                    $.ajax({
+                        url: '/asset_management/api/Maintenance/complete/' + id,
+                        type: "PUT",
+                        data: encoded,
+                        dataType: "JSON",
+                        contentType: "application/json",
+
+                        success:function(data){
+                            events = {
+                                asset_id : "{{id}}",
+                                event_title : "Maintenance Completed",
+                                event_message: "Maintenance named " + $(complete_maintenance_name).val()  + " completed on " + moment($(completed_date_legit).val()).format('LL') +
+                                " costing ₱" + $(complete_maintenance_cost).val() + ". Updated by " + sessionStorage.getItem("name")
+                                }
+            
+                                $.ajax({
+                                    url:'/asset_management/api/Event/',
+                                    type: "POST",
+                                    data: JSON.stringify(events),
+                                    dataType: "JSON",
+                                    contentType: "application/json",
+                
+                                    success: function(data){
+                                    console.log("EVENT CREATED")
+                                    load_event("{{id}}")
+                                    $('#completeMaintenance').modal('hide');
+                                    toastr.success('Maintenance updated successfully');
+                                    refresh_maintenance();
+                                    }
+                                })
+                        }
+
+                    });
+                    
+                    
+                }
+                else{
+
+                    form =  {
+                        maintenance_due: new Date($(completed_due_date).val()),
+                        maintenance_cost: $(complete_maintenance_cost).val(),
+                        maintenance_completed: new Date($(completed_date_legit).val()),
+                        maintenance_status: "Completed",
+                        };
+
+                    encoded = JSON.stringify(form)
+                    console.log(encoded)
+
+                    $.ajax({
+                        url: '/asset_management/api/Maintenance/complete/' + id,
+                        type: "PUT",
+                        data: encoded,
+                        dataType: "JSON",
+                        contentType: "application/json",
+
+                        success:function(data){
+                        events = {
+                            asset_id : "{{id}}",
+                            event_title : "Maintenance Completed",
+                            event_message: "Maintenance named " + $(complete_maintenance_name).val()  + " completed on " + moment($(completed_date_legit).val()).format('LL') +
+                            " costing ₱" + $(complete_maintenance_cost).val() + ". Updated by " + sessionStorage.getItem("name")
+                            }
+        
+                            $.ajax({
+                                url:'/asset_management/api/Event/',
+                                type: "POST",
+                                data: JSON.stringify(events),
+                                dataType: "JSON",
+                                contentType: "application/json",
+            
+                                success: function(data){
+                                console.log("EVENT CREATED")
+                                load_event("{{id}}")
+                                $('#completeMaintenance').modal('hide');
+                                toastr.success('Maintenance updated successfully');
+                                refresh_maintenance();
+                                }
+                            })
+                        }
+
+                    });
+                }
+
+            }
+
+        }); 
+    });
+
+
+      $(document).on("click", ".btn_delete", function(){
+        var id = this.id;
+        $('#confirm_delete_maintenance').modal('show');
+        
+        $(document).on("click", ".confirmed_delete", function(){
+          
+            $.ajax({
+              url: '/asset_management/api/Maintenance/' + id,
+              type: "DELETE",
+              data: { id: id },
+              dataType: "JSON",
+          
+              success: function(data){
+                $('#confirm_delete_maintenance').modal('hide');
+                toastr.info('Maintenance deleted successfully')
+                load_event("{{id}}")
+                refresh_maintenance();
+              }
+          // ajax closing tag
+          })
+          
+        });
+        
+      });
+
+    });
+</script>
+</div>
