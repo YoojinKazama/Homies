@@ -34,7 +34,7 @@ def get_user_info(
     user_data: UserData = Depends(get_user)
 ):
     try:
-        if(isAuthorized(user_data, AUTHORIZED_SUBSYSTEM, AUTHORIZED_ROLE)):
+        if isAuthorized(user_data, AUTHORIZED_SUBSYSTEM, AUTHORIZED_ROLE):
             user_info = db.query(Employee).filter(Employee.employee_id == user_data.employee_id).first()
             if not user_info:
                 raise HTTPException(status_code = 404, detail = {"message": "Employee does not exist"})

@@ -609,8 +609,6 @@ const viewIntervieweeDetails = (intervieweeID) => {
             const applicant = result.applicant_info;
             const applicant_status = applicant.status;
             
-            console.log(result)
-
             /**
              * Load Interviewee Details
              * Not yet interviewed
